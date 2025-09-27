@@ -3,7 +3,10 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - World
+  - Pawns
+  - UI
   layers:
   - Default
   - TransparentFX
@@ -40,4 +43,25 @@ TagManager:
   m_SortingLayers:
   - name: Default
     uniqueID: 0
+    locked: 0
+  - name: Terrain
+    uniqueID: 2681182811
+    locked: 0
+  - name: Floor
+    uniqueID: 249166143
+    locked: 0
+  - name: Buildings
+    uniqueID: 612074461
+    locked: 0
+  - name: Items
+    uniqueID: 3863571745
+    locked: 0
+  - name: Pawns
+    uniqueID: 2491950789
+    locked: 0
+  - name: FX
+    uniqueID: 3458575389
+    locked: 0
+  - name: UI
+    uniqueID: 2249022613
     locked: 0
