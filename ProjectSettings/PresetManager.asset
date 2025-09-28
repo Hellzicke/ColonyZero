@@ -13,6 +13,3 @@ PresetManager:
     - m_Preset: {fileID: 2655988077585873504, guid: 3a3850a0dbbc039489853f97b9a2a366, type: 2}
       m_Filter: Assets/Art/Sprites
       m_Disabled: 0
-    - m_Preset: {fileID: 2655988077585873504, guid: 3975c4db75d7efd46bee1656b89d15e8, type: 2}
-      m_Filter: Assets/Art/Sprites/doors
-      m_Disabled: 0
