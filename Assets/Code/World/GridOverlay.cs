@@ -7,6 +7,7 @@ public class GridOverlay : MonoBehaviour
     public Color lineColor = new Color(1, 1, 1, 0.15f);
     [Range(0.01f, 0.1f)] public float lineWidth = 0.03f;
     public bool show = true;
+    
 
     Transform _hGroup, _vGroup;
 

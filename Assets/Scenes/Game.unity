@@ -132,6 +132,7 @@ GameObject:
   m_Component:
   - component: {fileID: 804703606}
   - component: {fileID: 804703607}
+  - component: {fileID: 804703609}
   m_Layer: 0
   m_Name: System
   m_TagString: Untagged
@@ -171,6 +172,26 @@ MonoBehaviour:
   width: 128
   height: 128
   cellSize: {x: 1, y: 1}
+--- !u!114 &804703609
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 804703605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae95813bad34e3744bf502eb7250480c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  autoSetup: 1
+  createWorkerManager: 1
+  createWorkerSpawner: 1
+  workerPrefab: {fileID: 7894621398237491920, guid: 8c9f2a4e5d7b8f9a1c2d3e4f5a6b7c8d, type: 3}
+  initialWorkerCount: 1
+  workerMoveSpeed: 2
+  spawnAreaSize: {x: 10, y: 10}
+  spawnCenter: {x: 0, y: 0, z: 0}
 --- !u!1 &1234143497
 GameObject:
   m_ObjectHideFlags: 0
@@ -270,7 +291,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f83f08964cdfdb4cb56d4a2ab6e1818, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  grid: {fileID: 0}
+  grid: {fileID: 804703607}
   lineColor: {r: 1, g: 1, b: 1, a: 0.15}
   lineWidth: 0.03
   show: 1
@@ -445,10 +466,15 @@ MonoBehaviour:
   panSpeed: 20
   dragPanSpeed: 1
   speedBoost: 2
+  smoothMovement: 1
+  movementSmoothing: 8
+  acceleration: 10
+  deceleration: 15
   zoomSpeed: 5
   minOrtho: 6
   maxOrtho: 40
   zoomToMouse: 1
+  zoomSmoothing: 8
   clampToGrid: 1
   boundsMargin: 0.5
 --- !u!114 &2090112862

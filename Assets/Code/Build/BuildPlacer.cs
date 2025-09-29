@@ -1,104 +1,111 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using CT.Buildings;
+using CT.Build;
 
 public class BuildPlacer : MonoBehaviour
 {
-    [Header("Data")]
-    public List<BuildingType> palette;  // drag Floor.asset, Wall.asset, Door.asset here (in this order)
+    [Header("Palette (drag your ScriptableObjects here in order)")]
+    public List<BuildingType> palette; // [0]=Floor, [1]=Wall, [2]=Door
 
-    [Header("Scene Refs")]
-    public GridMap grid;                // drag your GridMap (or it will auto-grab GridMap.I)
-    public Transform floorParent;       // empty GameObject named "Floor"
-    public Transform structureParent;   // empty GameObject named "Structure"
+    [Header("Scene refs")]
+    public GridMap grid;
+    public Transform floorParent;
+    public Transform structureParent;
 
     [Header("Ghost")]
     public Color validColor = new Color(0f, 1f, 0f, 0.35f);
     public Color invalidColor = new Color(1f, 0f, 0f, 0.35f);
 
-    Camera cam;
-    int selected = 0; // 0=Floor, 1=Wall, 2=Door (match your palette order)
-    GameObject ghostGO;
-    SpriteRenderer ghostSR;
+    private Camera cam;
+    private int selectedIndex = 0;
+    private GameObject ghostGO;
+    private SpriteRenderer ghostSR;
 
-    // occupancy & objects per cell
-    GameObject[,] floors;
-    GameObject[,] structures;
-    bool[,] walkable;
+    private GameObject[,] floors;
+    private GameObject[,] structures;
+    private GameObject[,] doors;  // separate array for doors that can overlay walls
+    private GhostBuilding[,] ghostBuildings; // track ghost buildings waiting to be built
+    private bool[,] walkable;
 
     void Awake()
     {
         cam = Camera.main;
         if (!grid) grid = GridMap.I;
+        if (!grid) { Debug.LogError("BuildPlacer: GridMap not found."); enabled = false; return; }
 
-        floors = new GameObject[grid.width, grid.height];
+        if (!floorParent)     floorParent     = new GameObject("Floor").transform;
+        if (!structureParent) structureParent = new GameObject("Structure").transform;
+
+        floors     = new GameObject[grid.width, grid.height];
         structures = new GameObject[grid.width, grid.height];
-        walkable = new bool[grid.width, grid.height];
-        for (int x = 0; x < grid.width; x++) for (int y = 0; y < grid.height; y++) walkable[x, y] = true;
+        doors      = new GameObject[grid.width, grid.height];
+        ghostBuildings = new GhostBuilding[grid.width, grid.height];
+        walkable   = new bool[grid.width, grid.height];
+        for (int x = 0; x < grid.width; x++)
+            for (int y = 0; y < grid.height; y++)
+                walkable[x, y] = true;
 
-        // parents (optional)
-        if (!floorParent)
-        {
-            var f = new GameObject("Floor");
-            floorParent = f.transform;
-        }
-        if (!structureParent)
-        {
-            var s = new GameObject("Structure");
-            structureParent = s.transform;
-        }
-
-        // ghost
         ghostGO = new GameObject("Ghost");
         ghostSR = ghostGO.AddComponent<SpriteRenderer>();
         ghostSR.sortingLayerName = "Buildings";
         ghostSR.sortingOrder = 999;
         ghostGO.SetActive(false);
 
-        Select(0); // default to Floor
+        Select(0);
     }
 
     void Update()
     {
-        // hotkeys 1/2/3 to swap
         if (Input.GetKeyDown(KeyCode.Alpha1)) Select(0);
         if (Input.GetKeyDown(KeyCode.Alpha2)) Select(1);
         if (Input.GetKeyDown(KeyCode.Alpha3)) Select(2);
 
-        // don't place through UI
         if (EventSystem.current && EventSystem.current.IsPointerOverGameObject())
         { ghostGO.SetActive(false); return; }
 
-        // mouse → cell
         Vector3 world = cam.ScreenToWorldPoint(Input.mousePosition);
-        world.z = 0;
+        world.z = 0f;
         Vector2Int cell = grid.WorldToCell(world);
         if (!grid.InBounds(cell)) { ghostGO.SetActive(false); return; }
 
-        // show ghost
-        var bt = palette[selected];
-        if (ghostSR.sprite == null || ghostSR.sprite != GetPrimarySprite(bt))
-            ghostSR.sprite = GetPrimarySprite(bt);
+        var bt = GetSelectedType();
+        if (bt == null) { ghostGO.SetActive(false); return; }
 
+        var spr = GetPrimarySprite(bt);
+        if (ghostSR.sprite != spr) ghostSR.sprite = spr;
         ghostGO.SetActive(true);
         ghostGO.transform.position = grid.CellToWorld(cell);
+
         bool canPlace = CanPlace(bt, cell);
         ghostSR.color = canPlace ? validColor : invalidColor;
 
-        // LMB = paint / RMB = bulldoze
-        if (Input.GetMouseButton(0) && canPlace)
+        if (Input.GetMouseButton(0) && canPlace) 
+        {
+            // Only log door placements
+            if (IsDoorType(bt))
+            {
+                Debug.Log($"🚪 DOOR CLICK: Placing {bt.displayName} at {cell}, existing wall: {structures[cell.x, cell.y]?.name}");
+            }
             Place(bt, cell);
-        if (Input.GetMouseButton(1))
-            Bulldoze(cell);
+        }
+        if (Input.GetMouseButton(1)) Bulldoze(cell);
     }
 
+    // ===== helpers =====
     void Select(int index)
     {
-        selected = Mathf.Clamp(index, 0, palette.Count - 1);
-        // set ghost sprite immediately if possible
-        var bt = palette[selected];
-        var spr = GetPrimarySprite(bt);
+        if (palette == null || palette.Count == 0) return;
+        selectedIndex = Mathf.Clamp(index, 0, palette.Count - 1);
+        var spr = GetPrimarySprite(GetSelectedType());
         if (spr) ghostSR.sprite = spr;
+    }
+
+    BuildingType GetSelectedType()
+    {
+        if (palette == null || palette.Count == 0) return null;
+        return palette[Mathf.Clamp(selectedIndex, 0, palette.Count - 1)];
     }
 
     Sprite GetPrimarySprite(BuildingType bt)
@@ -110,104 +117,132 @@ public class BuildPlacer : MonoBehaviour
 
     bool CanPlace(BuildingType bt, Vector2Int c)
     {
-        // This guide is for 1x1 items. If you make bigger items later, extend this to check the footprint rect.
-        if (!grid.InBounds(c)) return false;
+        if (!grid.InBounds(c) || bt == null) return false;
 
-        if (bt == null) return false;
+        bool placingStructure = IsStructure(bt);
+        var existingStruct = structures[c.x, c.y];
+        var existingGhost = ghostBuildings[c.x, c.y];
 
-        if (IsStructure(bt))
+        // Can't place if there's already a ghost building here
+        if (existingGhost != null) return false;
+
+        if (placingStructure)
         {
-            // Check if there's already a structure at this position
-            var existingStructure = structures[c.x, c.y];
-            if (existingStructure != null)
-            {
-                // Allow doors to replace walls (doors are openings in walls)
-                if (IsDoor(bt) && IsWallAt(c))
-                {
-                    return true; // Allow door placement on wall
-                }
-                // Otherwise, don't allow multiple structures in same cell
-                return false;
-            }
+            if (existingStruct == null) return true;
+
+            // allow door replacing wall
+            if (IsDoorType(bt) && IsWallGO(existingStruct)) return true;
+
+            return false;
         }
         else
         {
-            // one floor per cell
-            if (floors[c.x, c.y] != null) return false;
+            return floors[c.x, c.y] == null;
         }
-
-        // Extra rules can go here (e.g., forbid door if no adjacent walls). For now, allow.
-        return true;
-    }
-
-    bool IsStructure(BuildingType bt)
-    {
-        // Treat anything that might block movement (walls/doors) as "structure".
-        // Floors are not structures.
-        return bt.blocksMovement || bt.displayName.ToLower().Contains("door") || bt.displayName.ToLower().Contains("wall");
-    }
-
-    bool IsDoor(BuildingType bt)
-    {
-        return bt.displayName.ToLower().Contains("door");
-    }
-
-    bool IsWallAt(Vector2Int c)
-    {
-        if (!grid.InBounds(c)) return false;
-        var go = structures[c.x, c.y];
-        if (!go) return false;
-        
-        // Check if the existing structure is a wall (blocks movement)
-        // We can also check the name or component for more precise identification
-        return go.name.ToLower().Contains("wall") || go.GetComponent<WallPiece>() != null;
     }
 
     void Place(BuildingType bt, Vector2Int c)
     {
-        // If placing a door on a wall, destroy the existing wall first
-        if (IsStructure(bt) && IsDoor(bt) && IsWallAt(c))
+        bool placingStructure = IsStructure(bt);
+
+        if (placingStructure)
         {
-            var existingWall = structures[c.x, c.y];
-            if (existingWall != null)
+            if (IsDoorType(bt))
             {
-                Destroy(existingWall);
-                structures[c.x, c.y] = null;
+                // Doors can only be placed if there's no existing door
+                if (doors[c.x, c.y] != null) return;
+                // Doors can be placed on walls or empty spaces
+            }
+            else
+            {
+                // Other structures (walls) can't be placed if there's already a structure
+                if (structures[c.x, c.y] != null) return;
             }
         }
 
-        // spawn
-        Transform parent = IsStructure(bt) ? structureParent : floorParent;
-        GameObject go = Instantiate(bt.prefab, grid.CellToWorld(c), Quaternion.identity, parent);
-        go.name = $"{bt.displayName}_{c.x}_{c.y}";
+        // Create ghost building that needs to be constructed
+        Vector3 pos = grid.CellToWorld(c);
+        GameObject ghostGO = CreateGhostBuilding(bt, pos, c);
+        
+        if (ghostGO)
+        {
+            Transform parent = placingStructure ? structureParent : floorParent;
+            ghostGO.transform.SetParent(parent);
+            
+            GhostBuilding ghost = ghostGO.GetComponent<GhostBuilding>();
+            if (ghost)
+            {
+                ghostBuildings[c.x, c.y] = ghost;
+                Debug.Log($"Placed ghost building: {bt.displayName} at {c}");
+            }
+        }
+    }
 
-        // register & walkability
-        if (IsStructure(bt))
+    GameObject CreateGhostBuilding(BuildingType bt, Vector3 position, Vector2Int gridPos)
+    {
+        // Create a ghost version of the building
+        GameObject ghostGO = new GameObject($"Ghost_{bt.displayName}_{gridPos.x}_{gridPos.y}");
+        ghostGO.transform.position = position;
+        
+        // Add sprite renderer with the building's sprite
+        SpriteRenderer sr = ghostGO.AddComponent<SpriteRenderer>();
+        Sprite buildingSprite = GetPrimarySprite(bt);
+        if (buildingSprite)
         {
-            structures[c.x, c.y] = go;
-            // wall blocks, door does not (we trust bt.blocksMovement)
-            walkable[c.x, c.y] = !bt.blocksMovement;
-            // If you implement auto-joining walls (next step), call RefreshWallsAround(c) here
+            sr.sprite = buildingSprite;
         }
-        else
-        {
-            floors[c.x, c.y] = go;
-            // no change to walkable
-        }
+        
+        // Add ghost building component
+        GhostBuilding ghost = ghostGO.AddComponent<GhostBuilding>();
+        ghost.buildingType = bt;
+        ghost.gridPosition = gridPos;
+        
+        return ghostGO;
     }
 
     void Bulldoze(Vector2Int c)
     {
-        // remove structure first if present; else remove floor
-        if (structures[c.x, c.y] != null)
+        if (!grid.InBounds(c)) return;
+
+        // First check for ghost buildings
+        if (ghostBuildings[c.x, c.y] != null)
         {
-            Destroy(structures[c.x, c.y]);
-            structures[c.x, c.y] = null;
-            // restore walkability (true if no other blocker)
-            walkable[c.x, c.y] = true;
-            // If auto-walls: RefreshWallsAround(c)
+            var ghost = ghostBuildings[c.x, c.y];
+            Destroy(ghost.gameObject);
+            ghostBuildings[c.x, c.y] = null;
+            Debug.Log($"Cancelled ghost building at {c}");
             return;
         }
+
+        // Then check for doors (on top layer)
+        if (doors[c.x, c.y] != null)
+        {
+            var door = doors[c.x, c.y];
+            Destroy(door);
+            doors[c.x, c.y] = null;
+            
+            // Update walkability based on what's underneath
+            bool hasWall = structures[c.x, c.y] != null;
+            walkable[c.x, c.y] = !hasWall; // walkable if no wall underneath
+            
+            WallManager.RefreshAround(c);
+            return;
+        }
+        
+        // Then check for structures (walls)
+        if (structures[c.x, c.y] != null)
+        {
+            var go = structures[c.x, c.y];
+            bool wasWall = IsWallGO(go);
+
+            Destroy(go);
+            structures[c.x, c.y] = null;
+            walkable[c.x, c.y] = true;
+
+            if (wasWall) WallManager.RefreshAround(c); // update neighbors
+            return;
+        }
+
         if (floors[c.x, c.y] != null)
         {
             Destroy(floors[c.x, c.y]);
@@ -215,20 +250,97 @@ public class BuildPlacer : MonoBehaviour
         }
     }
 
-    // === Public helpers you can expose to your pathfinder later ===
-    public bool IsWalkable(Vector2Int c)
+    /// <summary>
+    /// Called by GhostBuilding when construction is completed
+    /// </summary>
+    public void RegisterCompletedBuilding(BuildingType bt, Vector2Int c, GameObject realBuilding)
     {
-        if (!grid.InBounds(c)) return false;
-        return walkable[c.x, c.y];
+        if (!grid.InBounds(c)) return;
+        
+        // Clear the ghost building reference
+        ghostBuildings[c.x, c.y] = null;
+        
+        bool placingStructure = IsStructure(bt);
+        
+        if (placingStructure)
+        {
+            if (IsDoorType(bt))
+            {
+                doors[c.x, c.y] = realBuilding;
+                walkable[c.x, c.y] = true; // doors are walkable
+            }
+            else
+            {
+                structures[c.x, c.y] = realBuilding;
+                // Walls should always block movement, regardless of BuildingType setting
+                bool isWall = IsWallGO(realBuilding) || bt.displayName.ToLower().Contains("wall");
+                walkable[c.x, c.y] = !isWall; // walls block movement
+                
+                Debug.Log($"Completed building {bt.displayName} at {c} - walkable: {walkable[c.x, c.y]} (isWall: {isWall})");
+            }
+
+            // If it's a wall, refresh neighbors
+            if (IsWallGO(realBuilding)) WallManager.RefreshAround(c);
+            if (IsDoorGO(realBuilding)) WallManager.RefreshAround(c);
+        }
+        else
+        {
+            floors[c.x, c.y] = realBuilding;
+        }
+        
+        Debug.Log($"Registered completed building: {bt.displayName} at {c}");
     }
 
-    public bool HasWall(Vector2Int c)
+    // ===== classification =====
+    public bool IsStructure(BuildingType bt)
     {
-        if (!grid.InBounds(c)) return false;
-        var go = structures[c.x, c.y];
-        if (!go) return false;
-        // crude: assume "blocksMovement==true" means wall-like
-        return true; // refine later if needed
+        // Treat anything that might block movement (walls/doors) as "structure".
+        // Floors are not structures.
+        return bt.blocksMovement || bt.displayName.ToLower().Contains("door") || bt.displayName.ToLower().Contains("wall");
+    }
+
+    bool IsDoorType(BuildingType bt)
+    {
+        if (bt == null || bt.prefab == null) return false;
+        if (bt.prefab.GetComponent<DoorTag>() != null) return true;
+        var n = bt.displayName?.ToLower();
+        return n != null && n.Contains("door");
+    }
+
+    bool IsWallGO(GameObject go) => go && go.GetComponent<WallTag>() != null;
+    bool IsDoorGO(GameObject go) => go && go.GetComponent<DoorTag>() != null;
+
+    // Public for your pathfinder and debug overlay
+    public bool IsWalkable(Vector2Int c) => grid.InBounds(c) && walkable[c.x, c.y];
+    public GameObject GetStructure(Vector2Int c) => grid.InBounds(c) ? structures[c.x, c.y] : null;
+    public GameObject GetFloor(Vector2Int c) => grid.InBounds(c) ? floors[c.x, c.y] : null;
+    public GameObject GetDoor(Vector2Int c) => grid.InBounds(c) ? doors[c.x, c.y] : null;
+
+    // Debug method to visualize walkability
+    void OnDrawGizmos()
+    {
+        if (!grid || walkable == null) return;
+        
+        Vector3 cameraPos = Camera.main ? Camera.main.transform.position : Vector3.zero;
+        float viewDistance = 20f; // Only draw gizmos near camera
+        
+        for (int x = 0; x < grid.width; x++)
+        {
+            for (int y = 0; y < grid.height; y++)
+            {
+                Vector3 worldPos = grid.CellToWorld(new Vector2Int(x, y));
+                
+                // Only draw if close to camera
+                if (Vector3.Distance(worldPos, cameraPos) > viewDistance) continue;
+                
+                if (!walkable[x, y])
+                {
+                    Gizmos.color = Color.red;
+                    Gizmos.DrawWireCube(worldPos, Vector3.one * 0.8f);
+                }
+            }
+        }
     }
 }
+
 
