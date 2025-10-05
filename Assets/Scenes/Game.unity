@@ -133,6 +133,7 @@ GameObject:
   - component: {fileID: 804703606}
   - component: {fileID: 804703607}
   - component: {fileID: 804703609}
+  - component: {fileID: 804703610}
   m_Layer: 0
   m_Name: System
   m_TagString: Untagged
@@ -186,12 +187,32 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   autoSetup: 1
   createWorkerManager: 1
+  createJobManager: 1
   createWorkerSpawner: 1
   workerPrefab: {fileID: 7894621398237491920, guid: 8c9f2a4e5d7b8f9a1c2d3e4f5a6b7c8d, type: 3}
   initialWorkerCount: 1
   workerMoveSpeed: 2
   spawnAreaSize: {x: 10, y: 10}
   spawnCenter: {x: 0, y: 0, z: 0}
+--- !u!114 &804703610
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 804703605}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e472242e6e6dcc48ad7db4123d15b59, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  availableRoomTypes:
+  - {fileID: 11400000, guid: 2c27f62a523287740b6f8596c476093c, type: 2}
+  selectedRoomTypeIndex: 0
+  validRoomColor: {r: 0, g: 1, b: 0, a: 1}
+  invalidRoomColor: {r: 1, g: 0, b: 0, a: 1}
+  previewColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  isPlacingRoom: 0
 --- !u!1 &1234143497
 GameObject:
   m_ObjectHideFlags: 0

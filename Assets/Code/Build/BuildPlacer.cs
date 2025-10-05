@@ -62,6 +62,8 @@ public class BuildPlacer : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Alpha2)) Select(1);
         if (Input.GetKeyDown(KeyCode.Alpha3)) Select(2);
 
+        // Building placement always active (room system removed)
+
         if (EventSystem.current && EventSystem.current.IsPointerOverGameObject())
         { ghostGO.SetActive(false); return; }
 
